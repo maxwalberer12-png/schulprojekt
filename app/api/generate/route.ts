@@ -16,6 +16,8 @@ const SYSTEM_PROMPT =
   'Du schreibst professionelle, pädagogisch wertvolle Texte auf Deutsch. ' +
   'Antworte ausschließlich auf Deutsch. Sei präzise und praxisnah.'
 
+export const maxDuration = 60
+
 // ── Route Handler ──────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
