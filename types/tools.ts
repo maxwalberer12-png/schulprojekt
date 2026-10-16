@@ -53,3 +53,18 @@ export interface ToolCategoryMeta {
   color: string
   description: string
 }
+
+export interface GeneratedTask {
+  id: number
+  title: string
+  type?: string
+  instruction: string
+  items: unknown[]
+  solutionItems?: unknown[]
+}
+
+export interface GeneratedWorksheet {
+  titel: string
+  tasks: GeneratedTask[]
+}
+

@@ -6,46 +6,11 @@ import type { Tool, ToolCategoryMeta } from '@/types/tools'
 
 export const TOOL_CATEGORIES: ToolCategoryMeta[] = [
   {
-    id: 'zeugnisse',
-    label: 'Zeugnisse & Berichte',
-    icon: 'FileText',
-    color: 'bg-violet-100 text-violet-700',
-    description: 'Zeugnistexte und Lernentwicklungsberichte erstellen',
-  },
-  {
-    id: 'eltern',
-    label: 'Elternkommunikation',
-    icon: 'Mail',
-    color: 'bg-blue-100 text-blue-700',
-    description: 'Briefe, Einladungen und Mitteilungen für Eltern',
-  },
-  {
-    id: 'unterricht',
-    label: 'Unterrichtsplanung',
-    icon: 'BookOpen',
-    color: 'bg-green-100 text-green-700',
-    description: 'Stunden- und Wochenpläne, Lernziele formulieren',
-  },
-  {
     id: 'differenzierung',
-    label: 'Differenzierung',
+    label: 'Arbeitsblatt-Generator',
     icon: 'Layers',
-    color: 'bg-orange-100 text-orange-700',
-    description: 'Aufgaben auf verschiedenen Niveaustufen erstellen',
-  },
-  {
-    id: 'foerderung',
-    label: 'Förderung & Diagnose',
-    icon: 'TrendingUp',
-    color: 'bg-pink-100 text-pink-700',
-    description: 'Förderpläne, Diagnosebögen und Lernstandsbeschreibungen',
-  },
-  {
-    id: 'verwaltung',
-    label: 'Schulverwaltung',
-    icon: 'ClipboardList',
-    color: 'bg-gray-100 text-gray-700',
-    description: 'Formulare, Protokolle und administrative Texte',
+    color: 'bg-blue-100 text-blue-700',
+    description: 'Druckfertige Arbeitsblätter nach bayerischem LehrplanPLUS erstellen',
   },
 ]
 
@@ -53,7 +18,7 @@ export const TOOL_CATEGORIES: ToolCategoryMeta[] = [
 // TOOL-DEFINITIONEN
 // ─────────────────────────────────────────────────────────────
 
-export const TOOLS: Tool[] = [
+export const ALL_TOOLS: Tool[] = [
   // ── ZEUGNISSE & BERICHTE ──────────────────────────────────
   {
     id: 'zeugnis-grundschule',
@@ -561,14 +526,14 @@ Auf Deutsch, kindgerecht formuliert.`,
         label: 'Fach',
         type: 'select',
         required: true,
-        options: ['Deutsch', 'Mathematik', 'Sachunterricht', 'Englisch'],
+        options: ['Deutsch', 'Mathematik', 'Sachunterricht (HSU)', 'Englisch'],
       },
       {
         id: 'thema',
         label: 'Thema / Lerninhalt',
         type: 'text',
         required: true,
-        placeholder: 'z.B. Schriftliche Addition zweistelliger Zahlen',
+        placeholder: 'z. B. Zahlenraum bis 20: Plus und Minus, Verdoppeln, Nachbarzahlen...',
       },
       {
         id: 'klasse',
@@ -576,13 +541,6 @@ Auf Deutsch, kindgerecht formuliert.`,
         type: 'select',
         required: true,
         options: ['1. Klasse', '2. Klasse', '3. Klasse', '4. Klasse'],
-      },
-      {
-        id: 'anzahl_aufgaben',
-        label: 'Aufgaben pro Niveau',
-        type: 'select',
-        required: true,
-        options: ['3 Aufgaben', '5 Aufgaben', '7 Aufgaben'],
       },
       {
         id: 'kontext',
@@ -595,53 +553,11 @@ Auf Deutsch, kindgerecht formuliert.`,
     promptTemplate: `Erstelle ein didaktisch hochwertiges Grundschul-Arbeitsblatt zum Thema "{{thema}}" im Fach {{fach}}, {{klasse}}.
 
 Kontext: {{kontext}}
-Umfang pro Niveau: {{anzahl_aufgaben}}
+Gewählte Aufgabentypen: {{aufgabentypen}}
 
-DIDAKTISCHE LEITLINIEN (LehrplanPLUS Grundschule):
-1. TITEL: Sachlich und schulgerecht (z. B. "Satzbau und Satzzeichen", "Satzglieder bestimmen", "Nomen und Verben"). KEINE erfundenen Kunsttitel wie "Satzbauparty" oder "Rechtschreibabenteuer".
-2. BEGRIFFE: Nur Grundschulbegriffe verwenden (Nomen/Namenwörter, Verben/Tunwörter, Adjektive/Wiewörter, Satzzeichen . ! ?, Satzglieder). KEINE Sekundarstufenbegriffe wie "Präposition", "Subjunktion" oder "Haupt- und Nebensatz".
-3. SCHÜTTELSÄTZE (DIDAKTISCH EINDEUTIG & KLARE S-P-O STRUKTUR):
-   - Schüttelsätze müssen didaktisch eindeutig sein mit einer klaren Subjekt-Prädikat-Objekt-Struktur.
-   - Um das Erkennen des Satzanfangs fair zu üben, dürfen Wörter nicht so gewählt werden, dass fälschlicherweise das Objekt am Anfang großgeschrieben ist, wenn es nicht der Satzanfang sein soll.
-   - Vorgaben: Wenn Nomen vorkommen, z. B. "lisa / zur / schule / geht" (Aufgabe: Satzanfang und Nomen beachten) oder mit eindeutigem Satzanfang "Ball / mit / dem / spielen / Kinder / Die" -> "Die Kinder spielen mit dem Ball."
-   - Wenn das Satzanfangswort kein Nomen ist (z. B. "Die", "Der", "Wir", "Heute"), MUSS es in den Schüttelwörtern bereits GROSS vorgegeben werden!
-4. LEBENSWELT: Kindgerechte, alltägliche Sätze aus dem Schüleralltag (Schule, Tiere, Familie, Spielplatz, Hobbys). Keine sperrigen Konstrukte ("Segeltörn", "Käpt'n").
-
-AUFBAU DES ARBEITSBLATTS:
-
-# TITEL: [Sachlicher Grundschul-Titel passend zum Thema "{{thema}}"]
-# UNTERZEILE: {{fach}} · {{klasse}} · Thema: {{thema}}
-# WORTSPEICHER: [5-7 einfache Fach- oder Signalbegriffe für Grundschüler, kommagetrennt]
-
-# AUFGABE 1 [⭐]: Schüttelsätze ordnen
-Bringe die durcheinandergewürfelten Wörter in die richtige Reihenfolge und schreibe die Sätze auf. Denke an den großen Satzanfang und den Punkt!
-a) Schule / zur / geht / Lisa
-b) Ball / mit / dem / spielen / Kinder / Die
-
-# AUFGABE 2 [⭐⭐]: Satzzeichen setzen
-Setze am Satzende das passende Satzzeichen (. ! ?) ein.
-a) Heute scheint die Sonne ___
-b) Wann fängt die Pause an ___
-c) Pass gut auf ___
-
-# AUFGABE 3 [⭐⭐⭐]: Sätze bilden
-Bilde aus den vorgegebenen Wörtern eigene, vollständige Sätze. Achte auf den Satzanfang und das Satzzeichen.
-a) Hund, rennt, Garten
-b) Kinder, basteln, Bild
-[SCHREIBLINIEN: 2]
-
-# LÖSUNGEN:
-Aufgabe 1:
-a) Lisa geht zur Schule.
-b) Die Kinder spielen mit dem Ball.
-Aufgabe 2:
-a) Heute scheint die Sonne. (.)
-b) Wann fängt die Pause an? (?)
-c) Pass gut auf! (!)
-Aufgabe 3:
-[Musterlösungen mit Beispielsätzen]
-
-Wichtig: Beginne direkt mit "# TITEL:". Keine einleitenden Floskeln.`,
+Formatvorgaben:
+Beginne direkt mit "# TITEL:".
+Halte dich exakt an die Vorgaben aus den System-Leitlinien für das Fach {{fach}}.`,
   },
 
   {
@@ -948,6 +864,18 @@ Auf Deutsch. Amtliche, sachliche Sprache.`,
   },
 ]
 
+const aufgabenDifferenziertTool = ALL_TOOLS.find((t) => t.id === 'aufgaben-differenziert') ?? ALL_TOOLS[0]
+
+/** Aktive Tools – fürs Erste ausschließlich der Arbeitsblatt-Generator */
+export const TOOLS: Tool[] = [
+  {
+    ...aufgabenDifferenziertTool,
+    name: 'Arbeitsblatt-Generator',
+    badge: 'LehrplanPLUS Bayern',
+    shortDescription: 'Druckfertige DIN-A4-Arbeitsblätter nach bayerischem LehrplanPLUS für Klassen 1–4',
+  },
+]
+
 // ─────────────────────────────────────────────────────────────
 // HILFSFUNKTIONEN
 // ─────────────────────────────────────────────────────────────
@@ -959,7 +887,7 @@ export function getToolsByCategory(category: string): Tool[] {
 
 /** Ein einzelnes Tool per ID abrufen */
 export function getToolById(id: string): Tool | undefined {
-  return TOOLS.find((tool) => tool.id === id)
+  return TOOLS.find((tool) => tool.id === id) || ALL_TOOLS.find((tool) => tool.id === id)
 }
 
 /** Tools nach Suchbegriff filtern */

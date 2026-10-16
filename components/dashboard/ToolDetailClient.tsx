@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Clock, Sparkles, FileText, Mail, BookOpen, Layers,
@@ -14,6 +14,412 @@ import remarkGfm from 'remark-gfm'
 import type { Tool, ToolInputField } from '@/types/tools'
 import { getCategoryMeta } from '@/config/tools.config'
 import ArbeitsblattPreview from '@/components/ArbeitsblattPreview'
+import { LEHRPLANPLUS_MATHE_DATENBANK, LehrplanEintrag } from '@/lib/curriculum/lehrplanplus_mathe'
+import { resolveLehrplanStandard } from '@/lib/curriculum/resolver'
+import {
+  generateUniversalMathArbeitsblatt,
+  getTopicConfig,
+  normalizeUniversalTaskType,
+  TopicConfig,
+} from '@/lib/generators/universalMathGenerator'
+
+export const GRADE_TASK_TYPES: Record<1 | 2 | 3 | 4, string[]> = {
+  1: [
+    'Kopfrechnen / Grundrechenarten',
+    'Text-/Sachaufgaben (Rechengeschichten)',
+    'Zahlenmauern',
+    'Rechendreiecke',
+    'Rechenhäuser',
+    'Zwanzigerfeld / Punktefeld',
+    'Schüttelboxen (Zahlzerlegung)',
+    'Zehnerstopp (Rechnen in 2 Schritten)',
+    'Tausch- & Umkehraufgaben',
+    'Nachbarzahlen & Zahlenstrahl',
+    'Größer/Kleiner/Gleich (< > =)',
+    'Geld (Euro & Cent)',
+    'Uhrzeiten (volle Stunden)',
+    'Strichlisten & Häufigkeiten',
+    'Geometrie & Formen',
+    'Raumorientierung (Lagebeziehungen)',
+  ],
+  2: [
+    'Kopfrechnen / Grundrechenarten',
+    'Halbschriftliches Rechnen',
+    'Malreihen & Division (Einmaleins)',
+    'Hundertertafel & Zahlenrätsel',
+    'Geld mit Komma (€ & ct)',
+    'Längen messen (cm & m)',
+    'Geometrische Körper & Symmetrie',
+    'Zahlenmauern',
+    'Rechendreiecke',
+    'Rechenhäuser',
+    'Tausch- & Umkehraufgaben',
+    'Nachbarzahlen & Zahlenstrahl',
+    'Größer/Kleiner/Gleich (< > =)',
+    'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
+    'Uhrzeiten & Zeitspannen',
+    'Tabellen & Diagramme',
+  ],
+  3: [
+    'Stellenwerttafel (H | Z | E) & Zahlwörter',
+    'Tausenderbuch & Hunderterplatten (Dienes)',
+    'Nachbarzahlen (Vorgänger, Nachbarzehner, Nachbarhunderter)',
+    'Zahlenstrahl bis 1.000',
+    'Runden auf Zehner und Hunderter',
+    'Größer/Kleiner/Gleich & Zahlen ordnen',
+    'Halbschriftliche Addition & Subtraktion (ZR 1.000)',
+    'Kopfrechnen mit Hundertern & Zehnern',
+    'Zahlenmauern & Rechendreiecke (ZR 1.000)',
+    'Schriftliche Addition (im Kästchenraster)',
+    'Schriftliche Subtraktion (im Kästchenraster)',
+    'Fehlende Ziffern in schriftlichen Aufgaben',
+    'Überschlagsrechnung & Kontrolle',
+    'Zehner-Einmaleins (z.B. 4 · 60, 240 : 6)',
+    'Halbschriftliche Multiplikation (in Schritten)',
+    'Halbschriftliche Division (mit und ohne Rest)',
+    'Würfelnetze & Quadernetze erkennen',
+    'Würfelgebäude & Baupläne (Wie viele Würfel?)',
+    'Achsensymmetrie (am Gitternetz)',
+    'Rechte Winkel & Parallele Linien',
+    'Einheiten umrechnen (mm, cm, m, km)',
+    'Kommaschreibweise bei Längen (z.B. 1,45 m)',
+    'Rechnen mit Längen',
+    'Gewichte umrechnen & bis 1 kg ergänzen (g, kg, t)',
+    'Waagen ablesen & Gewichte vergleichen',
+    'Hohlmaße umrechnen & Messbecher ablesen (ml, l)',
+    'Zeitpunkt & Zeitdauer berechnen',
+    'Zeiteinheiten umrechnen (s, min, h)',
+    'Schriftliches Rechnen mit Geldbeträgen (€ mit Komma)',
+    'Balken- & Säulendiagramme auswerten',
+    'Wahrscheinlichkeit (sicher, möglich, unmöglich)',
+    'Kombinatorik (Baumdiagramm / Möglichkeiten)',
+    'Text-/Sachaufgaben',
+  ],
+  4: [
+    'Kopfrechnen / Grundrechenarten',
+    'Schriftliche Addition & Subtraktion',
+    'Schriftliche Multiplikation & Division',
+    'Runden & Stellenwerte',
+    'Flächeninhalt & Umfang (Rechteck & Quadrat)',
+    'Zahlenmauern',
+    'Nachbarzahlen & Zahlenstrahl',
+    'Größer/Kleiner/Gleich (< > =)',
+    'Geld mit Komma (€ & ct)',
+    'Einheiten umrechnen',
+    'Gewichte & Hohlmaße (g, kg, t / l, ml)',
+    'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
+    'Geometrische Körper & Symmetrie',
+    'Tabellen & Diagramme',
+  ],
+}
+
+export const MATHE_KEY_TO_LABEL: Record<string, string> = {
+  // Allgemeine / Übergreifende Keys
+  kopfrechnen: 'Kopfrechnen / Grundrechenarten',
+  kopfrechnen_k2: 'Kopfrechnen (ZR 100)',
+  sachaufgaben: 'Text-/Sachaufgaben (Rechengeschichten)',
+  sachaufgaben_k2: 'Text-/Sachaufgaben',
+  zahlenmauern: 'Zahlenmauern',
+  groesser_kleiner_gleich: 'Größer/Kleiner/Gleich (< > =)',
+  geld_vergleich_k2: 'Geldbeträge vergleichen (< > =)',
+  einheiten_umrechnen: 'Einheiten umrechnen',
+  nachbarzahlen: 'Nachbarzahlen & Zahlenstrahl',
+  nachbarzahlen_k2: 'Nachbarzahlen & Zahlenstrahl (ZR 100)',
+  tabellen: 'Tabellen & Diagramme',
+  rechendreiecke: 'Rechendreiecke',
+  rechenhaeuser: 'Rechenhäuser',
+  zwanzigerfeld: 'Zwanzigerfeld / Punktefeld',
+  schuettelboxen: 'Schüttelboxen (Zahlzerlegung)',
+  zehnerstopp: 'Zehnerstopp (Rechnen in 2 Schritten)',
+  aufgabenfamilien: 'Tausch- & Umkehraufgaben',
+  zahlenfolgen: 'Zahlenfolgen & Zahlen ordnen',
+  analogieaufgaben: 'Analogieaufgaben (Zwerg & Riese)',
+  verdoppeln_halbieren: 'Verdoppeln & Halbieren (Tabellen/Spiegel)',
+
+  // Klasse 1 Spezial-Sektionen
+  geld_zaehlen: 'Münzen & Scheine zählen',
+  geld_rechnen: 'Rechnen mit Geld (€ & ct)',
+  geld_vergleich: 'Geldbeträge vergleichen & Rückgeld',
+  uhrzeit_ablesen: 'Analoge Uhren ablesen (volle Stunden)',
+  uhrzeit_zeichnen: 'Stundenzeiger einzeichnen',
+  wochentage: 'Zeitspannen & Wochentage',
+  strichliste_ablesen: 'Strichlisten ablesen (5er-Bündel)',
+  strichliste_zeichnen: 'Strichlisten selbst zeichnen',
+  strichliste_zaehlen: 'Objekte zählen & Häufigkeitstabelle',
+  geometrie_formen_zaehlen: 'Grundformen erkennen & zählen',
+  geometrie_muster: 'Geometrische Musterreihen fortsetzen',
+  geometrie_punktgitter: 'Figuren & Spiegelbilder am Punktgitter',
+  raum_gitter_orientierung: '3x3-Gitter (links, rechts, oben, unten)',
+  raum_pfeile_zaehlen: 'Richtungspfeile zählen',
+  raum_gitter_zeichnen: 'Formen nach Anweisung zeichnen',
+
+  // Klasse 2 Spezial-Sektionen
+  hundertertafel: 'Hundertertafel & Zahlenkreuz',
+  hunderterfeld_punkte: 'Hunderterfeld (Punktefeld 10x10)',
+  zehnerstangen_einer: 'Zehnerstangen & Einerwürfel (Bündeln)',
+  stellenwert_ze: 'Stellenwerttafel (Z/E) & Ergänzen auf 100',
+  halbschriftlich: 'Halbschriftliches Rechnen (in Schritten)',
+  einmaleins_punktefeld: '1x1 Punktefelder (Plus- & Malaufgabe)',
+  einmaleins: 'Einmaleins-Reihen & Kopfrechnen',
+  division: 'Geteilt-Aufgaben (Division)',
+  division_rest: 'Division mit Rest (Einführung)',
+  einmaleins_umkehr: 'Tausch- & Umkehraufgaben (1x1)',
+  geometrie_koerper: 'Geometrische Körper (Steckbriefe: Ecken, Kanten, Flächen)',
+  achsensymmetrie: 'Achsensymmetrie (Spiegelbilder am Gitter)',
+  koerpernetze: 'Körpernetze & Würfelgebäude',
+  laengen_messen: 'Strecken mit dem Lineal messen (cm)',
+  laengen_umrechnen: 'Längen umrechnen (m & cm)',
+  laengen_vergleich: 'Längen vergleichen & berechnen',
+  geld_komma: 'Geldbeträge in Kommaschreibweise',
+  geld_rueckgeld: 'Rechnen mit Geld & Rückgeld (Kassenbon)',
+  uhrzeit_ablesen_k2: 'Uhrzeiten ablesen (Viertel, Halb, 5-Minuten)',
+  uhrzeit_zeichnen_k2: 'Zeiger einzeichnen (Stunde & Minute)',
+  zeitspannen_k2: 'Zeitspannen & Zeitdauer berechnen',
+  kalender_datum: 'Kalender & Datum lesen',
+  diagramm_k2: 'Säulendiagramm / Balkendiagramm ablesen',
+  tabelle_k2: 'Tabellen & Strichlisten auswerten',
+  kombinatorik_k2: 'Kombinatorik & Zufallsexperimente',
+
+  // Klasse 3 Spezial-Sektionen
+  stellenwert_hze: 'Stellenwerttafel (H | Z | E) & Zahlwörter',
+  dienes_tausender: 'Tausenderbuch & Hunderterplatten (Dienes)',
+  nachbarzahlen_k3: 'Nachbarzahlen (Vorgänger, Nachbarzehner, Nachbarhunderter)',
+  zahlenstrahl_1000: 'Zahlenstrahl bis 1.000',
+  runden_k3: 'Runden auf Zehner und Hunderter',
+  groesser_kleiner_ordnen_k3: 'Größer/Kleiner/Gleich & Zahlen ordnen',
+  halbschriftlich_k3: 'Halbschriftliche Addition & Subtraktion (ZR 1.000)',
+  kopfrechnen_k3: 'Kopfrechnen mit Hundertern & Zehnern',
+  zahlenmauern_k3: 'Zahlenmauern & Rechendreiecke (ZR 1.000)',
+  schriftlich_addition: 'Schriftliche Addition (im Kästchenraster)',
+  schriftlich_subtraktion: 'Schriftliche Subtraktion (im Kästchenraster)',
+  schriftlich_fehlende_ziffern: 'Fehlende Ziffern in schriftlichen Aufgaben',
+  ueberschlag_kontrolle: 'Überschlagsrechnung & Kontrolle',
+  zehner_einmaleins: 'Zehner-Einmaleins (z.B. 4 · 60, 240 : 6)',
+  halbschriftlich_multiplikation: 'Halbschriftliche Multiplikation (in Schritten)',
+  halbschriftlich_division: 'Halbschriftliche Division (mit und ohne Rest)',
+  wuerfelnetze: 'Würfelnetze & Quadernetze erkennen',
+  wuerfelgebaeude_bauplan: 'Würfelgebäude & Baupläne (Wie viele Würfel?)',
+  achsensymmetrie_k3: 'Achsensymmetrie (am Gitternetz)',
+  rechte_winkel_parallelen: 'Rechte Winkel & Parallele Linien',
+  laengen_umrechnen_k3: 'Einheiten umrechnen (mm, cm, m, km)',
+  laengen_komma_k3: 'Kommaschreibweise bei Längen (z.B. 1,45 m)',
+  rechnen_laengen: 'Rechnen mit Längen',
+  gewichte_umrechnen_k3: 'Gewichte umrechnen & bis 1 kg ergänzen (g, kg, t)',
+  waagen_ablesen: 'Waagen ablesen & Gewichte vergleichen',
+  messbecher_ablesen: 'Hohlmaße umrechnen & Messbecher ablesen (ml, l)',
+  zeitpunkt_zeitdauer: 'Zeitpunkt & Zeitdauer berechnen',
+  zeiteinheiten_k3: 'Zeiteinheiten umrechnen (s, min, h)',
+  geld_schriftlich: 'Schriftliches Rechnen mit Geldbeträgen (€ mit Komma)',
+  balkendiagramm_k3: 'Balken- & Säulendiagramme auswerten',
+  wahrscheinlichkeit_k3: 'Wahrscheinlichkeit (sicher, möglich, unmöglich)',
+  kombinatorik_baumdiagramm: 'Kombinatorik (Baumdiagramm / Möglichkeiten)',
+  sachaufgaben_k3: 'Text-/Sachaufgaben',
+
+  // Klasse 3 & 4
+  schriftlich: 'Schriftliche Addition & Subtraktion',
+  schriftlich_mult_div: 'Schriftliche Multiplikation & Division',
+  runden: 'Runden & Stellenwerte',
+  flaeche_umfang: 'Flächeninhalt & Umfang (Rechteck & Quadrat)',
+  gewichte_hohlmasse: 'Gewichte & Hohlmaße (g, kg, t / l, ml)',
+
+  // Klasse 4 Größen & Messen Spezial-Sektionen
+  laengen_komma_k4: 'Kommaschreibweise bei Längen (z.B. 2,35 m, 1,5 km)',
+  laengen_umrechnen_k4: 'Große Längeneinheiten umrechnen (km, m, dm, cm, mm)',
+  rechnen_laengen_k4: 'Rechnen mit Längen (mit Komma)',
+  gewichte_umrechnen_k4: 'Gewichte umrechnen (t, kg, g)',
+  bruchteile_groessen_k4: 'Bruchteile von Größen (z.B. ½ kg = 500 g, ¼ t = 250 kg)',
+  rechnen_gewichte_k4: 'Rechnen mit Gewichten (t, kg, g)',
+  sachaufgaben_k4: 'Text-/Sachaufgaben zu Größen',
+}
+
+export const MATHE_LABEL_TO_KEY: Record<string, string> = {
+  // Klasse 4 Größen & Messen Labels
+  'Kommaschreibweise bei Längen (z.B. 2,35 m, 1,5 km)': 'laengen_komma_k4',
+  'Große Längeneinheiten umrechnen (km, m, dm, cm, mm)': 'laengen_umrechnen_k4',
+  'Rechnen mit Längen (mit Komma)': 'rechnen_laengen_k4',
+  'Gewichte umrechnen (t, kg, g)': 'gewichte_umrechnen_k4',
+  'Bruchteile von Größen (z.B. ½ kg = 500 g, ¼ t = 250 kg)': 'bruchteile_groessen_k4',
+  'Rechnen mit Gewichten (t, kg, g)': 'rechnen_gewichte_k4',
+  'Text-/Sachaufgaben zu Größen': 'sachaufgaben_k4',
+
+  // Grundrechenarten & Kopfrechnen
+  'Kopfrechnen / Grundrechenarten': 'kopfrechnen',
+  'Kopfrechnen (ZR 100)': 'kopfrechnen_k2',
+  'Kopfrechnen mit Hundertern & Zehnern': 'kopfrechnen_k3',
+  'Kopfrechnen': 'kopfrechnen',
+  'Text-/Sachaufgaben (Frage, Rechnung, Antwort)': 'sachaufgaben',
+  'Text-/Sachaufgaben (Rechengeschichten)': 'sachaufgaben',
+  'Text-/Sachaufgaben': 'sachaufgaben_k3',
+  'Zahlenmauern': 'zahlenmauern',
+  'Zahlenmauern & Rechendreiecke (ZR 1.000)': 'zahlenmauern_k3',
+  'Größer/Kleiner/Gleich (< > =)': 'groesser_kleiner_gleich',
+  'Größer/Kleiner/Gleich & Zahlen ordnen': 'groesser_kleiner_ordnen_k3',
+  'Einheiten umrechnen': 'einheiten_umrechnen',
+  'Einheiten umrechnen (mm, cm, m, km)': 'laengen_umrechnen_k3',
+  'Nachbarzahlen & Zahlenstrahl': 'nachbarzahlen',
+  'Nachbarzahlen & Zahlenstrahl (ZR 100)': 'nachbarzahlen_k2',
+  'Nachbarzahlen (Vorgänger, Nachbarzehner, Nachbarhunderter)': 'nachbarzahlen_k3',
+  'Zahlenstrahl bis 1.000': 'zahlenstrahl_1000',
+  'Runden auf Zehner und Hunderter': 'runden_k3',
+  'Tabellen & Diagramme': 'tabellen',
+  'Rechendreiecke': 'rechendreiecke',
+  'Rechenhäuser': 'rechenhaeuser',
+  'Zwanzigerfeld / Punktefeld': 'zwanzigerfeld',
+  'Zwanzigerfeld': 'zwanzigerfeld',
+  'Punktefeld': 'zwanzigerfeld',
+  'Zehnerfeld': 'zwanzigerfeld',
+  'Tausch- & Umkehraufgaben': 'aufgabenfamilien',
+  'Tausch- & Umkehraufgaben (Aufgabenfamilien)': 'einmaleins_umkehr',
+  'Aufgabenfamilien': 'aufgabenfamilien',
+  'Schüttelboxen (Zahlzerlegung)': 'schuettelboxen',
+  'Schüttelboxen': 'schuettelboxen',
+  'Zehnerstopp (Rechnen in 2 Schritten)': 'zehnerstopp',
+  'Zehnerstopp': 'zehnerstopp',
+  'Zahlenfolgen & Zahlen ordnen': 'zahlenfolgen',
+  'Zahlenfolgen': 'zahlenfolgen',
+  'Analogieaufgaben (Zwerg & Riese)': 'analogieaufgaben',
+  'Analogieaufgaben': 'analogieaufgaben',
+  'Verdoppeln & Halbieren (Tabellen/Spiegel)': 'verdoppeln_halbieren',
+  'Verdoppeln & Halbieren': 'verdoppeln_halbieren',
+
+  // Klasse 3 Spezifika
+  'Stellenwerttafel (H | Z | E) & Zahlwörter': 'stellenwert_hze',
+  'Tausenderbuch & Hunderterplatten (Dienes)': 'dienes_tausender',
+  'Halbschriftliche Addition & Subtraktion (ZR 1.000)': 'halbschriftlich_k3',
+  'Schriftliche Addition (im Kästchenraster)': 'schriftlich_addition',
+  'Schriftliche Addition': 'schriftlich_addition',
+  'Schriftliche Subtraktion (im Kästchenraster)': 'schriftlich_subtraktion',
+  'Schriftliche Subtraktion': 'schriftlich_subtraktion',
+  'Fehlende Ziffern in schriftlichen Aufgaben': 'schriftlich_fehlende_ziffern',
+  'Fehlende Ziffern in schriftlichen Aufgaben (Kleckse)': 'schriftlich_fehlende_ziffern',
+  'Überschlagsrechnung & Kontrolle': 'ueberschlag_kontrolle',
+  'Zehner-Einmaleins (z.B. 4 · 60, 240 : 6)': 'zehner_einmaleins',
+  'Zehner-Einmaleins': 'zehner_einmaleins',
+  'Halbschriftliche Multiplikation (in Schritten)': 'halbschriftlich_multiplikation',
+  'Halbschriftliche Division (mit und ohne Rest)': 'halbschriftlich_division',
+  'Würfelnetze & Quadernetze erkennen': 'wuerfelnetze',
+  'Würfelgebäude & Baupläne (Wie viele Würfel?)': 'wuerfelgebaeude_bauplan',
+  'Würfelgebäude & Baupläne': 'wuerfelgebaeude_bauplan',
+  'Achsensymmetrie (am Gitternetz)': 'achsensymmetrie_k3',
+  'Rechte Winkel & Parallele Linien': 'rechte_winkel_parallelen',
+  'Kommaschreibweise bei Längen (z.B. 1,45 m)': 'laengen_komma_k3',
+  'Kommaschreibweise bei Längen': 'laengen_komma_k3',
+  'Rechnen mit Längen': 'rechnen_laengen',
+  'Gewichte umrechnen & bis 1 kg ergänzen (g, kg, t)': 'gewichte_umrechnen_k3',
+  'Waagen ablesen & Gewichte vergleichen': 'waagen_ablesen',
+  'Hohlmaße umrechnen & Messbecher ablesen (ml, l)': 'messbecher_ablesen',
+  'Zeitpunkt & Zeitdauer berechnen': 'zeitpunkt_zeitdauer',
+  'Zeiteinheiten umrechnen (s, min, h)': 'zeiteinheiten_k3',
+  'Schriftliches Rechnen mit Geldbeträgen (€ mit Komma)': 'geld_schriftlich',
+  'Balken- & Säulendiagramme auswerten': 'balkendiagramm_k3',
+  'Wahrscheinlichkeit (sicher, möglich, unmöglich)': 'wahrscheinlichkeit_k3',
+  'Kombinatorik (Baumdiagramm / Möglichkeiten)': 'kombinatorik_baumdiagramm',
+
+  // Klasse 1 Geometrie / Größen / Daten
+  'Münzen & Scheine zählen': 'geld_zaehlen',
+  'Rechnen mit Geld (€ & ct)': 'geld_rechnen',
+  'Geldbeträge vergleichen & Rückgeld': 'geld_vergleich',
+  'Analoge Uhren ablesen (volle Stunden)': 'uhrzeit_ablesen',
+  'Stundenzeiger einzeichnen': 'uhrzeit_zeichnen',
+  'Zeitspannen & Wochentage': 'wochentage',
+  'Strichlisten ablesen (5er-Bündel)': 'strichliste_ablesen',
+  'Strichlisten selbst zeichnen': 'strichliste_zeichnen',
+  'Objekte zählen & Häufigkeitstabelle': 'strichliste_zaehlen',
+  'Grundformen erkennen & zählen': 'geometrie_formen_zaehlen',
+  'Geometrische Musterreihen fortsetzen': 'geometrie_muster',
+  'Figuren & Spiegelbilder am Punktgitter': 'geometrie_punktgitter',
+  '3x3-Gitter (links, rechts, oben, unten)': 'raum_gitter_orientierung',
+  'Richtungspfeile zählen': 'raum_pfeile_zaehlen',
+  'Formen nach Anweisung zeichnen': 'raum_gitter_zeichnen',
+
+  // Klasse 2
+  'Hundertertafel & Zahlenkreuz': 'hundertertafel',
+  'Hundertertafel & Zahlenrätsel': 'hundertertafel',
+  'Hundertertafel': 'hundertertafel',
+  'Hunderterfeld (Punktefeld 10x10)': 'hunderterfeld_punkte',
+  'Hunderterfeld': 'hunderterfeld_punkte',
+  'Zehnerstangen & Einerwürfel (Bündeln)': 'zehnerstangen_einer',
+  'Stellenwerttafel (Z/E) & Ergänzen auf 100': 'stellenwert_ze',
+  'Stellenwerttafel (Z/E)': 'stellenwert_ze',
+  'Halbschriftliches Rechnen (in Schritten)': 'halbschriftlich',
+  'Halbschriftliches Rechnen': 'halbschriftlich',
+  'Halbschriftlich': 'halbschriftlich',
+  '1x1 Punktefelder (Plus- & Malaufgabe)': 'einmaleins_punktefeld',
+  'Einmaleins-Reihen & Kopfrechnen': 'einmaleins',
+  'Malreihen & Division (Einmaleins)': 'einmaleins',
+  'Malreihen & Division': 'einmaleins',
+  'Einmaleins': 'einmaleins',
+  'Geteilt-Aufgaben (Division)': 'division',
+  'Division mit Rest (Einführung)': 'division_rest',
+  'Division mit Rest': 'division_rest',
+  'Tausch- & Umkehraufgaben (1x1)': 'einmaleins_umkehr',
+  'Geometrische Körper (Steckbriefe: Ecken, Kanten, Flächen)': 'geometrie_koerper',
+  'Geometrische Körper (Steckbriefe)': 'geometrie_koerper',
+  'Geometrische Körper & Symmetrie': 'geometrie_koerper',
+  'Geometrische Körper': 'geometrie_koerper',
+  'Achsensymmetrie (Spiegelbilder am Gitter)': 'achsensymmetrie',
+  'Achsensymmetrie (Spiegelbilder zeichnen)': 'achsensymmetrie',
+  'Körpernetze & Würfelgebäude': 'koerpernetze',
+  'Körpernetze & Ansichten': 'koerpernetze',
+  'Strecken mit dem Lineal messen (cm)': 'laengen_messen',
+  'Längen messen (cm & m)': 'laengen_messen',
+  'Längen messen': 'laengen_messen',
+  'Längen umrechnen (m & cm)': 'laengen_umrechnen',
+  'Längen vergleichen & berechnen': 'laengen_vergleich',
+  'Geldbeträge in Kommaschreibweise': 'geld_komma',
+  'Geld mit Komma (€ & ct)': 'geld_komma',
+  'Geld mit Komma': 'geld_komma',
+  'Rechnen mit Geld & Rückgeld (Kassenbon)': 'geld_rueckgeld',
+  'Rechnen mit Geld & Rückgeld (bis 100 €)': 'geld_rueckgeld',
+  'Geldbeträge vergleichen (< > =)': 'geld_vergleich_k2',
+  'Uhrzeiten ablesen (Viertel, Halb, 5-Minuten)': 'uhrzeit_ablesen_k2',
+  'Uhrzeiten ablesen (Viertel, Halb, Minuten)': 'uhrzeit_ablesen_k2',
+  'Zeiger einzeichnen (Stunde & Minute)': 'uhrzeit_zeichnen_k2',
+  'Zeitspannen & Zeitdauer berechnen': 'zeitspannen_k2',
+  'Kalender & Datum lesen': 'kalender_datum',
+  'Kalender & Datum': 'kalender_datum',
+  'Säulendiagramm / Balkendiagramm ablesen': 'diagramm_k2',
+  'Tabellen & Strichlisten auswerten': 'tabelle_k2',
+  'Tabelle auswerten & ergänzen': 'tabelle_k2',
+  'Kombinatorik & Zufallsexperimente': 'kombinatorik_k2',
+  'Kombinatorik & Zufall': 'kombinatorik_k2',
+
+  // Klassen 3 & 4
+  'Schriftliche Addition & Subtraktion': 'schriftlich',
+  'Schriftliche Multiplikation & Division': 'schriftlich',
+  'Runden & Stellenwerte': 'runden',
+  'Flächeninhalt & Umfang (Rechteck & Quadrat)': 'flaeche_umfang',
+  'Gewichte & Hohlmaße (g, kg / l, ml)': 'gewichte_hohlmasse',
+  'Gewichte & Hohlmaße (g, kg, t / l, ml)': 'gewichte_hohlmasse',
+}
+
+export function filterOrFallbackTaskTypes(
+  selectedLabelsOrKeys: string[],
+  aktivesThema: LehrplanEintrag | null | undefined,
+  grade?: number
+): string[] {
+  const normGrade = (Math.min(Math.max(grade ?? aktivesThema?.klasse ?? 1, 1), 4) as 1 | 2 | 3 | 4)
+  const topicTitle = aktivesThema?.titel || ''
+  const topicConfig = getTopicConfig(normGrade, topicTitle)
+
+  const allowedKeys =
+    topicConfig.availableTaskTypes && topicConfig.availableTaskTypes.length > 0
+      ? new Set(topicConfig.availableTaskTypes)
+      : new Set((GRADE_TASK_TYPES[normGrade] || []).map((l) => MATHE_LABEL_TO_KEY[l] || l))
+
+  const validSelection = selectedLabelsOrKeys
+    .map((item) => {
+      const key = MATHE_LABEL_TO_KEY[item] || item
+      return allowedKeys.has(key) ? (MATHE_KEY_TO_LABEL[key] || item) : null
+    })
+    .filter((x): x is string => Boolean(x))
+
+  if (validSelection.length > 0) {
+    return validSelection
+  }
+
+  return topicConfig.defaultTaskTypes.map((k) => MATHE_KEY_TO_LABEL[k] || k)
+}
 
 const ICON_MAP: Record<string, React.ElementType> = {
   FileText, Mail, BookOpen, Layers, TrendingUp, ClipboardList,
@@ -30,8 +436,25 @@ const CATEGORY_STYLES: Record<string, { headerBg: string; badge: string }> = {
   verwaltung: { headerBg: 'from-gray-50 to-white', badge: 'bg-gray-100 text-gray-700' },
 }
 
-const SUBJECT_CONFIGS: Record<
-  string,
+export function normalizeSubjectKey(
+  rawSubject?: string
+): 'Mathematik' | 'Sachunterricht' | 'Deutsch' | 'Englisch' {
+  const lower = (rawSubject || '').toLowerCase().trim()
+  if (lower.includes('mathe') || lower.includes('rechnen')) return 'Mathematik'
+  if (
+    lower.includes('sach') ||
+    lower.includes('hsu') ||
+    lower.includes('heimat') ||
+    lower.includes('natur')
+  ) {
+    return 'Sachunterricht'
+  }
+  if (lower.includes('engl')) return 'Englisch'
+  return 'Deutsch'
+}
+
+export const SUBJECT_CONFIGS: Record<
+  'Mathematik' | 'Sachunterricht' | 'Deutsch' | 'Englisch',
   {
     taskTypes: string[]
     defaultTaskTypes: string[]
@@ -41,53 +464,179 @@ const SUBJECT_CONFIGS: Record<
 > = {
   Mathematik: {
     taskTypes: [
-      'Kopfrechnen',
-      'Sach-/Textaufgaben',
+      'Kopfrechnen / Grundrechenarten',
+      'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
       'Zahlenmauern',
-      'Größen umrechnen',
-      'Größer-Kleiner (< > =)',
-      'Knobelaufgaben',
+      'Größer/Kleiner/Gleich (< > =)',
+      'Einheiten umrechnen',
+      'Nachbarzahlen & Zahlenstrahl',
+      'Tabellen & Diagramme',
+      'Rechendreiecke',
+      'Rechenhäuser',
+      'Zwanzigerfeld / Punktefeld',
+      'Tausch- & Umkehraufgaben',
+      'Schüttelboxen (Zahlzerlegung)',
+      'Zehnerstopp (Rechnen in 2 Schritten)',
+      'Hundertertafel & Zahlenrätsel',
+      'Halbschriftliches Rechnen',
+      'Malreihen & Division (Einmaleins)',
+      'Geld mit Komma (€ & ct)',
+      'Längen messen (cm & m)',
+      'Geometrische Körper & Symmetrie',
+      'Geometrie & Formen',
     ],
-    defaultTaskTypes: ['Kopfrechnen', 'Sach-/Textaufgaben'],
+    defaultTaskTypes: [
+      'Kopfrechnen / Grundrechenarten',
+      'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
+      'Zahlenmauern',
+    ],
     extraOptionLabel: 'Kariertes Rechenkästchen-Feld anzeigen',
     extraOptionKey: 'show_rechenkaestchen',
-  },
-  Deutsch: {
-    taskTypes: [
-      'Schüttelsätze',
-      'Lückentext',
-      'Wortarten bestimmen',
-      'Satzzeichen setzen',
-      'Leseverständnis',
-      'Freies Schreiben',
-    ],
-    defaultTaskTypes: ['Schüttelsätze', 'Satzzeichen setzen'],
-    extraOptionLabel: 'Wortspeicher-Box oben anzeigen',
-    extraOptionKey: 'show_wortspeicher',
   },
   Sachunterricht: {
     taskTypes: [
       'Lückentext mit Fachbegriffen',
-      'Zuordnungsaufgabe',
-      'Richtig/Falsch',
-      'Abläufe sortieren',
-      'Erklärfragen',
+      'Richtig/Falsch-Aussagen',
+      'Prozesse nummerieren/sortieren',
+      'Zuordnungsaufgaben',
+      'Kurze Erklärfragen',
     ],
-    defaultTaskTypes: ['Lückentext mit Fachbegriffen', 'Zuordnungsaufgabe'],
+    defaultTaskTypes: [
+      'Lückentext mit Fachbegriffen',
+      'Richtig/Falsch-Aussagen',
+      'Zuordnungsaufgaben',
+    ],
+    extraOptionLabel: 'Wortspeicher-Box oben anzeigen',
+    extraOptionKey: 'show_wortspeicher',
+  },
+  Deutsch: {
+    taskTypes: [
+      'Schüttelsätze',
+      'Wortarten bestimmen',
+      'Satzzeichen setzen',
+      'Leseverständnis',
+      'Freies Schreiben',
+      'Lückentext',
+    ],
+    defaultTaskTypes: [
+      'Schüttelsätze',
+      'Wortarten bestimmen',
+      'Satzzeichen setzen',
+    ],
     extraOptionLabel: 'Wortspeicher-Box oben anzeigen',
     extraOptionKey: 'show_wortspeicher',
   },
   Englisch: {
     taskTypes: [
       'Vokabelzuordnung',
-      'Lückentext',
       'Matching (Bild/Wort)',
+      'Lückentext',
       'Kurzantworten',
     ],
     defaultTaskTypes: ['Vokabelzuordnung', 'Lückentext'],
     extraOptionLabel: 'Wortspeicher-Box oben anzeigen',
     extraOptionKey: 'show_wortspeicher',
   },
+}
+
+export function getSubjectConfig(subject?: string) {
+  const key = normalizeSubjectKey(subject)
+  return SUBJECT_CONFIGS[key]
+}
+
+export function getRecommendedTaskTypesForTopic(
+  fach?: string,
+  thema?: string
+): string[] | null {
+  const normFach = normalizeSubjectKey(fach)
+  const normThema = (thema || '').toLowerCase().trim()
+  if (!normThema) return null
+
+  if (normFach === 'Mathematik') {
+    // 1. Division / Multiplikation / Einmaleins
+    if (
+      /divid|teil|geteilt|multipli|mal\b|einmaleins|1x1|malnehmen|produkt|quotient|faktor/i.test(
+        normThema
+      )
+    ) {
+      return [
+        'Kopfrechnen / Grundrechenarten',
+        'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
+        'Größer/Kleiner/Gleich (< > =)',
+      ]
+    }
+    // 2. Geometrie / Formen / Körper
+    if (
+      /geometrie|form|körper|würfel|quader|kugel|dreieck|rechteck|quadrat|symmetrie|spiegel/i.test(
+        normThema
+      )
+    ) {
+      return [
+        'Geometrie & Formen',
+        'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
+      ]
+    }
+    // 3. Größen / Einheiten / Geld / Längen
+    if (
+      /einheit|größ|geld|euro|cent|ct|€|läng|meter|cm|km|gewicht|kilo|gramm|zeit|uhr/i.test(
+        normThema
+      )
+    ) {
+      if (/k1_|klasse 1|1\. klasse|bis 20\s*€|volle stunden/i.test(normThema)) {
+        return [
+          'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
+          'Größer/Kleiner/Gleich (< > =)',
+          'Kopfrechnen / Grundrechenarten',
+        ]
+      }
+      return [
+        'Einheiten umrechnen',
+        'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
+        'Größer/Kleiner/Gleich (< > =)',
+      ]
+    }
+    // 4. Nachbarzahlen / Zahlenstrahl / Orientierung
+    if (
+      /nachbar|zahlenstrahl|orientier|stellenwert|vorgänger|nachfolger|zehner|hunderter/i.test(
+        normThema
+      )
+    ) {
+      return [
+        'Nachbarzahlen & Zahlenstrahl',
+        'Größer/Kleiner/Gleich (< > =)',
+        'Kopfrechnen / Grundrechenarten',
+      ]
+    }
+    // 5. Addition / Subtraktion / Zahlenmauern / Rechendreiecke / Rechenhäuser
+    if (/addit|subtra|plus|minus|zahlenmauer|rechendreieck|rechenhaus|zerleg/i.test(normThema)) {
+      return [
+        'Kopfrechnen / Grundrechenarten',
+        'Zahlenmauern',
+        'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
+      ]
+    }
+    // 6. Tabellen & Diagramme
+    if (/tabelle|diagramm|daten|strichliste|säulendiagramm/i.test(normThema)) {
+      return [
+        'Tabellen & Diagramme',
+        'Text-/Sachaufgaben (Frage, Rechnung, Antwort)',
+      ]
+    }
+  }
+
+  if (normFach === 'Deutsch') {
+    if (/lese|text|verständnis|geschichte/i.test(normThema)) {
+      return ['Leseverständnis', 'Lückentext']
+    }
+    if (/wortart|nomen|verb|adjektiv/i.test(normThema)) {
+      return ['Wortarten bestimmen', 'Lückentext']
+    }
+    if (/satz|schüttelsatz|zeichen|punkt|komma/i.test(normThema)) {
+      return ['Schüttelsätze', 'Satzzeichen setzen']
+    }
+  }
+
+  return null
 }
 
 interface ToolDetailClientProps {
@@ -98,20 +647,24 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
   const isWorksheet = tool.id === 'aufgaben-differenziert' || tool.category === 'differenzierung'
 
   const [formValues, setFormValues] = useState<Record<string, string>>({
-    fach: 'Deutsch',
+    fach: 'Mathematik',
+    klasse: '1. Klasse',
+    thema: 'Zahlenraum bis 10: Zahlzerlegung & Verliebte Zahlen',
     seitenumfang: '1 DIN-A4-Seite (Kompakt)',
     diff_modus: 'Alle Niveaustufen auf einem Blatt (Stern-System)',
-    show_wortspeicher: 'true',
-    show_rechenkaestchen: 'false',
+    anzahl_aufgaben: '3',
+    show_wortspeicher: 'false',
+    show_rechenkaestchen: 'true',
     show_loesung: 'true',
     show_notenraster: 'false',
     show_illustration: 'true',
     illustration_position: 'header',
     bild_motiv: '',
     bild_stil: 'vektor',
-    aufgabentypen: 'Schüttelsätze, Satzzeichen setzen',
+    aufgabentypen: 'Zwanzigerfeld / Punktefeld, Tausch- & Umkehraufgaben, Schüttelboxen (Zahlzerlegung)',
   })
 
+  const [taskCounts, setTaskCounts] = useState<Record<string, number>>({})
   const [output, setOutput] = useState<string>('')
   const [illustrationUrl, setIllustrationUrl] = useState<string | null>(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false)
@@ -121,42 +674,185 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
   const [viewMode, setViewMode] = useState<'worksheet' | 'markdown'>(isWorksheet ? 'worksheet' : 'markdown')
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  // ── Live-Update / Reaktivität für Arbeitsblätter (Klassen 1 bis 4) ──
+  useEffect(() => {
+    if (!isWorksheet) return
+    const isMath = normalizeSubjectKey(formValues.fach) === 'Mathematik'
+    const parsedGrade = parseInt((formValues.klasse || '1').match(/\d+/)?.[0] || '1', 10)
+    const normGrade = (Math.min(Math.max(parsedGrade, 1), 4) as 1 | 2 | 3 | 4)
+    if (!isMath) return
+
+    const activeTypes = (formValues.aufgabentypen || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+
+    const curTasksPerLevel = parseInt((formValues.anzahl_aufgaben || '3').match(/\d+/)?.[0] || '3', 10)
+
+    const generated = generateUniversalMathArbeitsblatt({
+      grade: normGrade,
+      thema: formValues.thema,
+      selectedTaskTypes: activeTypes,
+      tasksPerLevel: curTasksPerLevel,
+      taskCounts,
+    })
+    setOutput(JSON.stringify(generated, null, 2))
+  }, [
+    isWorksheet,
+    formValues.fach,
+    formValues.klasse,
+    formValues.thema,
+    formValues.aufgabentypen,
+    formValues.anzahl_aufgaben,
+    taskCounts,
+  ])
+
   const Icon = ICON_MAP[tool.icon] ?? FileText
   const catMeta = getCategoryMeta(tool.category)
   const styles = CATEGORY_STYLES[tool.category] ?? CATEGORY_STYLES.verwaltung
 
   const handleChange = (fieldId: string, value: string) => {
     if (fieldId === 'fach' && isWorksheet) {
-      const cfg = SUBJECT_CONFIGS[value] ?? SUBJECT_CONFIGS['Deutsch']
+      const subjectKey = normalizeSubjectKey(value)
+      const isMath = subjectKey === 'Mathematik'
+      const cfg = SUBJECT_CONFIGS[subjectKey]
+
+      if (isMath) {
+        const parsedGrade = parseInt((formValues.klasse || '1').match(/\d+/)?.[0] || '1', 10)
+        const normGrade = (Math.min(Math.max(parsedGrade, 1), 4) as 1 | 2 | 3 | 4)
+        const gradeEntries = LEHRPLANPLUS_MATHE_DATENBANK.filter(e => e.klasse === normGrade)
+        const defaultThema = gradeEntries[0]?.titel || 'Zahlenraum bis 10: Zahlzerlegung & Verliebte Zahlen'
+        const topicCfg = getTopicConfig(normGrade, defaultThema)
+        const defaultLabels = topicCfg.defaultTaskTypes.map((k) => MATHE_KEY_TO_LABEL[k] || k)
+
+        setFormValues((prev) => ({
+          ...prev,
+          fach: value,
+          thema: defaultThema,
+          aufgabentypen: defaultLabels.join(', '),
+          show_wortspeicher: 'false',
+          show_rechenkaestchen: 'true',
+        }))
+        return
+      }
+
       setFormValues((prev) => ({
         ...prev,
         fach: value,
+        thema: 'Leseverständnis & Wortarten',
         aufgabentypen: cfg.defaultTaskTypes.join(', '),
-        show_wortspeicher: value === 'Mathematik' ? 'false' : 'true',
-        show_rechenkaestchen: value === 'Mathematik' ? 'true' : 'false',
+        show_wortspeicher: 'true',
+        show_rechenkaestchen: 'false',
       }))
       return
     }
+
+    if (fieldId === 'klasse' && isWorksheet) {
+      const parsedGrade = parseInt(value.match(/\d+/)?.[0] || '1', 10)
+      const normGrade = (Math.min(Math.max(parsedGrade, 1), 4) as 1 | 2 | 3 | 4)
+      const gradeEntries = LEHRPLANPLUS_MATHE_DATENBANK.filter(e => e.klasse === normGrade)
+      const isMath = normalizeSubjectKey(formValues.fach) === 'Mathematik'
+
+      const currentMatches = gradeEntries.some(e => e.titel === formValues.thema || e.id === formValues.thema)
+      const newThema = isMath
+        ? (currentMatches ? formValues.thema : (gradeEntries[0]?.titel || ''))
+        : formValues.thema
+
+      let newAufgabentypen = formValues.aufgabentypen || ''
+      if (isMath) {
+        const topicCfg = getTopicConfig(normGrade, newThema)
+        const defaultLabels = topicCfg.defaultTaskTypes.map((k) => MATHE_KEY_TO_LABEL[k] || k)
+        newAufgabentypen = defaultLabels.join(', ')
+      }
+
+      setFormValues((prev) => ({
+        ...prev,
+        klasse: value,
+        thema: newThema,
+        aufgabentypen: newAufgabentypen,
+      }))
+      return
+    }
+
+    if (fieldId === 'thema' && isWorksheet) {
+      const isMath = normalizeSubjectKey(formValues.fach) === 'Mathematik'
+      if (isMath) {
+        const parsedGrade = parseInt((formValues.klasse || '1').match(/\d+/)?.[0] || '1', 10)
+        const normGrade = (Math.min(Math.max(parsedGrade, 1), 4) as 1 | 2 | 3 | 4)
+        const topicCfg = getTopicConfig(normGrade, value)
+        const defaultLabels = topicCfg.defaultTaskTypes.map((k) => MATHE_KEY_TO_LABEL[k] || k)
+
+        setFormValues((prev) => ({
+          ...prev,
+          thema: value,
+          aufgabentypen: defaultLabels.join(', '),
+        }))
+        return
+      }
+
+      setFormValues((prev) => ({
+        ...prev,
+        thema: value,
+      }))
+      return
+    }
+
+    if (fieldId === 'seitenumfang') {
+      setFormValues((prev) => ({
+        ...prev,
+        seitenumfang: value,
+      }))
+      return
+    }
+
     setFormValues((prev) => ({ ...prev, [fieldId]: value }))
   }
 
   // Umschalten von Aufgabentypen (Chips)
   const handleToggleTaskType = (type: string) => {
+    const isMath = normalizeSubjectKey(formValues.fach) === 'Mathematik'
+    let allowedTypes: Set<string>
+
+    if (isMath) {
+      const parsedGrade = parseInt((formValues.klasse || '1').match(/\d+/)?.[0] || '1', 10)
+      const normGrade = (Math.min(Math.max(parsedGrade, 1), 4) as 1 | 2 | 3 | 4)
+      const topicCfg = getTopicConfig(normGrade, formValues.thema)
+      const topicChips = topicCfg.availableTaskTypes && topicCfg.availableTaskTypes.length > 0
+        ? topicCfg.availableTaskTypes.map((k) => MATHE_KEY_TO_LABEL[k] || k)
+        : GRADE_TASK_TYPES[normGrade]
+      allowedTypes = new Set(topicChips)
+    } else {
+      const subjectCfg = getSubjectConfig(formValues.fach)
+      allowedTypes = new Set(subjectCfg.taskTypes)
+    }
+
+    if (!allowedTypes.has(type)) return
+
     const currentList = (formValues.aufgabentypen || '')
       .split(',')
       .map((t) => t.trim())
-      .filter(Boolean)
+      .filter((t) => allowedTypes.has(t))
 
     let newList: string[]
     if (currentList.includes(type)) {
-      // Wenn mindestens 2 aktiv sind, darf abgewählt werden
-      if (currentList.length > 2) {
+      if (currentList.length > 1) {
         newList = currentList.filter((t) => t !== type)
+        // Beim Abwählen Zähler im State zurücksetzen:
+        setTaskCounts((prev) => {
+          const next = { ...prev }
+          delete next[type]
+          return next
+        })
       } else {
-        return // Mindestens 2 müssen aktiv bleiben
+        return // Mindestens 1 Aufgabentyp muss aktiv bleiben
       }
     } else {
       newList = [...currentList, type]
+      // Beim Anwählen Standardwert setzen (3 Aufgaben):
+      setTaskCounts((prev) => ({
+        ...prev,
+        [type]: prev[type] ?? 3,
+      }))
     }
 
     setFormValues((prev) => ({
@@ -165,9 +861,47 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
     }))
   }
 
-  const isFormValid = tool.inputs
-    .filter((f) => f.required)
-    .every((f) => (formValues[f.id] ?? '').trim() !== '')
+  const handleUpdateTaskCount = (type: string, delta: number) => {
+    setTaskCounts((prev) => {
+      const cur = prev[type] ?? 3
+      const nextVal = Math.max(1, Math.min(cur + delta, 5))
+      return {
+        ...prev,
+        [type]: nextVal,
+      }
+    })
+  }
+
+  const isMathForValidation = normalizeSubjectKey(formValues.fach || 'Deutsch') === 'Mathematik'
+  const parsedGradeForValidation = parseInt((formValues.klasse || '1').match(/\d+/)?.[0] || '1', 10)
+  const normGradeForValidation = (Math.min(Math.max(parsedGradeForValidation, 1), 4) as 1 | 2 | 3 | 4)
+  const topicCfgForValidation = isMathForValidation ? getTopicConfig(normGradeForValidation, formValues.thema) : null
+  const topicChipsForValidation = topicCfgForValidation?.availableTaskTypes && topicCfgForValidation.availableTaskTypes.length > 0
+    ? topicCfgForValidation.availableTaskTypes.map((k) => MATHE_KEY_TO_LABEL[k] || k)
+    : GRADE_TASK_TYPES[normGradeForValidation]
+
+  const allowedTypesForValidation = isMathForValidation
+    ? new Set(topicChipsForValidation)
+    : new Set(getSubjectConfig(formValues.fach || 'Deutsch').taskTypes)
+
+  const currentSelectedTaskTypes = (formValues.aufgabentypen || '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter((t) => allowedTypesForValidation.has(t))
+
+  const isFormValid = (() => {
+    // 1. Jahrgangsstufe (klasse) ist ein striktes Pflichtfeld (1. bis 4. Klasse)
+    const klasseVal = (formValues.klasse ?? '').trim()
+    if (!klasseVal) return false
+
+    // 2. Für Arbeitsblätter: Mindestens 1 Aufgabentyp muss aktiv sein
+    if (isWorksheet && currentSelectedTaskTypes.length === 0) return false
+
+    // 3. Alle im Tool als required deklarierten Felder prüfen
+    return tool.inputs
+      .filter((f) => f.required)
+      .every((f) => (formValues[f.id] ?? '').trim() !== '')
+  })()
 
   // ── Illustration generieren (FLUX & automatische Transparenz) ──────
   const generateIllustration = async (customThema?: string, customPosition?: string) => {
@@ -214,6 +948,23 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
       generateIllustration()
     }
 
+    const isMath = normalizeSubjectKey(formValues.fach) === 'Mathematik'
+    const parsedGrade = parseInt((formValues.klasse || '1').match(/\d+/)?.[0] || '1', 10)
+    const normGrade = Math.min(Math.max(parsedGrade, 1), 4) as 1 | 2 | 3 | 4
+    const aktivesThema = isMath ? resolveLehrplanStandard(normGrade, formValues.thema) : null
+
+    const activeSelectedTaskTypes = (formValues.aufgabentypen || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+
+    const finalSelectedTaskTypes = [...activeSelectedTaskTypes]
+
+    const effectiveFields: Record<string, string> = {
+      ...formValues,
+      aufgabentypen: finalSelectedTaskTypes.join(', '),
+    }
+
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
@@ -223,7 +974,23 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           toolId: tool.id,
-          fields: formValues,
+          fach: formValues.fach,
+          klasse: formValues.klasse,
+          thema: formValues.thema,
+          seitenumfang: formValues.seitenumfang,
+          diff_modus: formValues.diff_modus,
+          anzahl_aufgaben: formValues.anzahl_aufgaben || '3',
+          tasksPerLevel: parseInt((formValues.anzahl_aufgaben || '3').match(/\d+/)?.[0] || '3', 10),
+          taskCounts,
+          aufgabentypen: finalSelectedTaskTypes.join(', '),
+          selectedTaskTypes: finalSelectedTaskTypes,
+          fields: {
+            ...effectiveFields,
+            anzahl_aufgaben: formValues.anzahl_aufgaben || '3',
+            tasksPerLevel: String(parseInt((formValues.anzahl_aufgaben || '3').match(/\d+/)?.[0] || '3', 10)),
+            taskCounts: JSON.stringify(taskCounts),
+            aufgabentypen: finalSelectedTaskTypes.join(', '),
+          },
         }),
         signal: abortController.signal,
       })
@@ -295,10 +1062,6 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
   const wordCount = output.trim() ? output.trim().split(/\s+/).length : 0
   const charCount = output.length
 
-  const activeTaskTypes = (formValues.aufgabentypen || '')
-    .split(',')
-    .map((t) => t.trim())
-
   return (
     <div className="max-w-6xl mx-auto">
       {/* Zurück-Link */}
@@ -354,7 +1117,20 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
 
             {/* Felder */}
             <div className="p-6 space-y-5">
-              {tool.inputs.map((field: ToolInputField) => (
+              {(isWorksheet
+                ? [...tool.inputs].sort((a, b) => {
+                    const order: Record<string, number> = {
+                      fach: 1,
+                      klasse: 2,
+                      thema: 3,
+                      kontext: 4,
+                    }
+                    return (order[a.id] ?? 99) - (order[b.id] ?? 99)
+                  })
+                : tool.inputs
+              )
+                .filter((field) => field.id !== 'anzahl_aufgaben')
+                .map((field: ToolInputField) => (
                 <div key={field.id}>
                   <label
                     htmlFor={field.id}
@@ -366,22 +1142,115 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
                     )}
                   </label>
 
-                  {/* Text Input */}
-                  {field.type === 'text' && (
-                    <input
-                      id={field.id}
-                      type="text"
-                      disabled={isGenerating}
-                      value={formValues[field.id] ?? ''}
-                      onChange={(e) => handleChange(field.id, e.target.value)}
-                      placeholder={field.placeholder}
-                      required={field.required}
-                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                    />
-                  )}
+                  {field.id === 'thema' && isWorksheet && normalizeSubjectKey(formValues.fach) === 'Mathematik' ? (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <select
+                          id={field.id}
+                          disabled={isGenerating}
+                          value={formValues[field.id] ?? ''}
+                          onChange={(e) => handleChange(field.id, e.target.value)}
+                          required={field.required}
+                          className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow bg-white appearance-none cursor-pointer pr-10 disabled:bg-gray-50 disabled:text-gray-400 font-medium"
+                        >
+                          <option value="" disabled>Lehrplan-Thema auswählen...</option>
+                          {(() => {
+                            const parsedGrade = parseInt((formValues.klasse || '1').match(/\d+/)?.[0] || '1', 10)
+                            const normGrade = Math.min(Math.max(parsedGrade, 1), 4) as 1 | 2 | 3 | 4
+                            const bereiche = [
+                              "Zahlen und Operationen",
+                              "Raum und Form",
+                              "Größen und Messen",
+                              "Daten und Zufall"
+                            ] as const
+                            const klassenEintraege = LEHRPLANPLUS_MATHE_DATENBANK.filter(e => e.klasse === normGrade)
 
-                  {/* Textarea */}
-                  {field.type === 'textarea' && (
+                            return bereiche.map((bereich) => {
+                              const eintraege = klassenEintraege.filter(e => e.bereich === bereich)
+                              if (eintraege.length === 0) return null
+                              return (
+                                <optgroup key={bereich} label={`── ${bereich.toUpperCase()} ──`}>
+                                  {eintraege.map((e) => (
+                                    <option key={e.id} value={e.titel}>
+                                      {e.titel}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )
+                            })
+                          })()}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                      </div>
+
+                      {/* Info-Badge mit amtlicher LehrplanPLUS-Kompetenz */}
+                      {(() => {
+                        const parsedGrade = parseInt((formValues.klasse || '1').match(/\d+/)?.[0] || '1', 10)
+                        const eintrag = resolveLehrplanStandard(parsedGrade, formValues.thema)
+                        if (!eintrag) return null
+                        return (
+                          <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-xs space-y-1.5 text-blue-900">
+                            <div className="flex items-center justify-between gap-1.5 font-semibold text-blue-800">
+                              <span className="flex items-center gap-1.5">
+                                <ShieldCheck className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                                LehrplanPLUS Bayern · {eintrag.bereich}
+                              </span>
+                              <span className="bg-blue-100/80 text-blue-800 px-2 py-0.5 rounded text-[11px] font-semibold">
+                                ZR {eintrag.zahlenraum >= 1000000 ? '1.000.000' : eintrag.zahlenraum >= 1000 ? '1.000' : eintrag.zahlenraum}
+                              </span>
+                            </div>
+                            <p className="text-blue-950/80 leading-relaxed italic">
+                              &bdquo;{eintrag.kompetenzText}&ldquo;
+                            </p>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  ) : field.type === 'text' ? (
+                    <>
+                      <input
+                        id={field.id}
+                        type="text"
+                        disabled={isGenerating}
+                        value={formValues[field.id] ?? ''}
+                        onChange={(e) => handleChange(field.id, e.target.value)}
+                        placeholder={
+                          field.id === 'thema' && isWorksheet
+                            ? 'z. B. Zahlenraum bis 20: Plus und Minus, Verdoppeln, Nachbarzahlen...'
+                            : field.placeholder
+                        }
+                        required={field.required}
+                        className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                      {field.id === 'thema' && isWorksheet && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          <span className="text-[11px] text-gray-400 font-medium">Beispiele:</span>
+                          {(normalizeSubjectKey(formValues.fach) === 'Mathematik'
+                            ? [
+                                'Zahlenraum bis 20: Plus und Minus (ohne Zehnerübergang)',
+                                'Zahlenraum bis 20: Verdoppeln und Halbieren',
+                                'Vorgänger, Nachfolger & Zahlenstrahl',
+                                'Verliebte Zahlen zur 10',
+                              ]
+                            : [
+                                'Leseverständnis',
+                                'Wortarten bestimmen',
+                                'Schüttelsätze & Satzzeichen',
+                              ]
+                          ).map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => handleChange('thema', preset)}
+                              className="px-2 py-0.5 rounded-md bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600 text-[11px] font-medium border border-gray-200 transition-colors"
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : field.type === 'textarea' ? (
                     <textarea
                       id={field.id}
                       disabled={isGenerating}
@@ -392,10 +1261,7 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
                       rows={field.rows ?? 3}
                       className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow bg-white resize-none disabled:bg-gray-50 disabled:text-gray-400"
                     />
-                  )}
-
-                  {/* Select */}
-                  {field.type === 'select' && (
+                  ) : field.type === 'select' ? (
                     <div className="relative">
                       <select
                         id={field.id}
@@ -412,7 +1278,19 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
                       </select>
                       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                     </div>
-                  )}
+                  ) : field.type === 'number' ? (
+                    <input
+                      id={field.id}
+                      type="number"
+                      disabled={isGenerating}
+                      min={field.min ?? 1}
+                      max={field.max ?? 10}
+                      value={formValues[field.id] ?? ''}
+                      onChange={(e) => handleChange(field.id, e.target.value)}
+                      required={field.required}
+                      className="w-24 px-3 py-2 border rounded-lg text-center font-semibold text-gray-800"
+                    />
+                  ) : null}
 
                   {/* Hinweistext */}
                   {field.helperText && (
@@ -498,38 +1376,109 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
 
                   {/* 3. Aufgabentypen (Fachabhängige Auswahl-Chips) */}
                   {(() => {
-                    const currentFach = formValues.fach || 'Deutsch'
-                    const subjectCfg =
-                      SUBJECT_CONFIGS[currentFach] ?? SUBJECT_CONFIGS['Deutsch']
+                    const currentFach = formValues.fach || 'Mathematik'
+                    const isMath = normalizeSubjectKey(currentFach) === 'Mathematik'
+                    const parsedGrade = parseInt((formValues.klasse || '1').match(/\d+/)?.[0] || '1', 10)
+                    const normGrade = Math.min(Math.max(parsedGrade, 1), 4) as 1 | 2 | 3 | 4
+                    const aktivesThema = isMath ? resolveLehrplanStandard(normGrade, formValues.thema) : null
+
+                    const subjectCfg = getSubjectConfig(currentFach)
+                    const validTaskTypes = new Set(subjectCfg.taskTypes)
+                    const topicCfg = isMath ? getTopicConfig(normGrade, formValues.thema) : null
+                    const topicChips = topicCfg?.availableTaskTypes && topicCfg.availableTaskTypes.length > 0
+                      ? topicCfg.availableTaskTypes.map((k) => MATHE_KEY_TO_LABEL[k] || k)
+                      : GRADE_TASK_TYPES[normGrade]
+                    const availableTaskTypes = isMath
+                      ? topicChips
+                      : subjectCfg.taskTypes
+
+                    const allowedTaskTypesSet = new Set(availableTaskTypes)
+                    const subjectActiveTypes = (formValues.aufgabentypen || '')
+                      .split(',')
+                      .map((t) => t.trim())
+                      .filter((t) => allowedTaskTypesSet.has(t))
+
                     return (
                       <div>
-                        <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
                           <label className="text-xs font-medium text-gray-700">
                             Aufgabentypen ({currentFach}):
                           </label>
-                          <span className="text-[11px] text-gray-400">
-                            {activeTaskTypes.length} aktiv
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {subjectActiveTypes.length > 3 && formValues.seitenumfang === '1 DIN-A4-Seite (Kompakt)' && (
+                              <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                Tipp: 3–4 für 1 Seite
+                              </span>
+                            )}
+                            <span className="text-[11px] text-gray-400">
+                              {subjectActiveTypes.length} aktiv
+                            </span>
+                          </div>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
-                          {subjectCfg.taskTypes.map((type) => {
-                            const isActive = activeTaskTypes.includes(type)
+                          {availableTaskTypes.map((type) => {
+                            const isActive = subjectActiveTypes.includes(type)
+                            const currentCount = taskCounts[type] ?? 3
+
+                            if (isActive) {
+                              return (
+                                <div
+                                  key={type}
+                                  className="inline-flex items-center rounded-md border border-blue-600 bg-blue-600 text-white shadow-2xs overflow-hidden text-xs"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleTaskType(type)}
+                                    className="px-2.5 py-1 font-medium hover:bg-blue-700 transition-colors cursor-pointer flex items-center gap-1"
+                                    title="Klicken zum Abwählen"
+                                  >
+                                    <span className="font-bold">✓</span>
+                                    <span>{type}</span>
+                                  </button>
+                                  <div className="flex items-center bg-blue-700 border-l border-blue-500 px-1 py-0.5 gap-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleUpdateTaskCount(type, -1)
+                                      }}
+                                      disabled={currentCount <= 1}
+                                      className="w-4 h-4 flex items-center justify-center rounded hover:bg-blue-800 disabled:opacity-30 disabled:cursor-not-allowed text-[11px] font-bold leading-none select-none cursor-pointer"
+                                      title="1 Aufgabe weniger (Min: 1)"
+                                    >
+                                      −
+                                    </button>
+                                    <span
+                                      className="text-[11px] font-bold font-mono px-1 min-w-[14px] text-center select-none"
+                                      title={`Aktuell ${currentCount} Aufgabe(n) für diesen Typ (1 bis 5)`}
+                                    >
+                                      {currentCount}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleUpdateTaskCount(type, 1)
+                                      }}
+                                      disabled={currentCount >= 5}
+                                      className="w-4 h-4 flex items-center justify-center rounded hover:bg-blue-800 disabled:opacity-30 disabled:cursor-not-allowed text-[11px] font-bold leading-none select-none cursor-pointer"
+                                      title="1 Aufgabe mehr (Max: 5)"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            }
+
                             return (
                               <button
                                 key={type}
                                 type="button"
                                 onClick={() => handleToggleTaskType(type)}
-                                className={`
-                                  px-2.5 py-1 rounded-md text-xs font-medium border transition-colors
-                                  ${
-                                    isActive
-                                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                                  }
-                                `}
+                                className="px-2.5 py-1 rounded-md text-xs font-medium border transition-colors cursor-pointer bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
                               >
-                                {isActive ? '✓ ' : '+ '}
-                                {type}
+                                + {type}
                               </button>
                             )
                           })}
@@ -740,24 +1689,38 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
                 <button
                   type="button"
                   onClick={handleGenerate}
-                  disabled={!isFormValid}
+                  disabled={!isFormValid || isGenerating}
                   className={`
                     w-full flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl font-semibold text-sm transition-all
-                    ${isFormValid
+                    ${isFormValid && !isGenerating
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md active:scale-[0.98]'
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     }
                   `}
                 >
                   <Wand2 className="w-4 h-4" />
-                  <span>{output ? 'Erneut generieren' : 'KI-Text generieren'}</span>
+                  <span>
+                    {isGenerating
+                      ? 'Arbeitsblatt wird generiert...'
+                      : isWorksheet
+                      ? output
+                        ? 'Arbeitsblatt neu generieren'
+                        : 'Arbeitsblatt generieren'
+                      : output
+                      ? 'Erneut generieren'
+                      : 'KI-Text generieren'}
+                  </span>
                   <Sparkles className="w-4 h-4 opacity-70" />
                 </button>
               )}
 
               {!isFormValid && (
-                <p className="text-xs text-center text-gray-400 mt-2">
-                  Bitte alle Pflichtfelder ausfüllen.
+                <p className="text-xs text-center text-amber-600 mt-2 font-medium">
+                  {!(formValues.klasse ?? '').trim()
+                    ? '⚠️ Bitte wähle eine Jahrgangsstufe (1. bis 4. Klasse) aus.'
+                    : isWorksheet && currentSelectedTaskTypes.length === 0
+                    ? '⚠️ Bitte wähle mindestens einen Aufgabentyp aus.'
+                    : 'Bitte alle Pflichtfelder ausfüllen.'}
                 </p>
               )}
             </div>
@@ -902,6 +1865,7 @@ export default function ToolDetailClient({ tool }: ToolDetailClientProps) {
                     rawContent={output}
                     toolName={tool.name}
                     formValues={formValues}
+                    taskCounts={taskCounts}
                     isGenerating={isGenerating}
                     illustrationUrl={illustrationUrl}
                     isGeneratingImage={isGeneratingImage}

@@ -70,7 +70,9 @@ body {
   }
 
   #arbeitsblatt-print-area,
-  #arbeitsblatt-print-area * {
+  #arbeitsblatt-print-area *,
+  .arbeitsblatt-page,
+  .arbeitsblatt-page * {
     visibility: visible;
   }
 
@@ -87,8 +89,26 @@ body {
     background: transparent !important;
   }
 
+  .arbeitsblatt-page {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    background: transparent !important;
+  }
+
+  .task-block {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
   .print-page-break {
     page-break-before: always !important;
     break-before: page !important;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
   }
 }

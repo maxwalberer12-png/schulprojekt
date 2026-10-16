@@ -733,12 +733,44 @@ export function getCurriculumPromptGuidelines(
   const { subjectData, gradeData } = getCurriculumData(rawSubject, rawGrade)
   const grade = gradeData.grade
 
-  const allowedOpsStr = GRUNDSCHUL_OPERATOREN.slice(0, 8)
+  const allowedOps = GRUNDSCHUL_OPERATOREN.filter((o) => {
+    if (subjectData.subject === 'Mathematik') {
+      return (
+        o.operator.includes('berechne') ||
+        o.operator.includes('vergleiche') ||
+        o.operator.includes('ergänze') ||
+        o.operator.includes('ordne') ||
+        o.operator.includes('finde')
+      )
+    }
+    if (subjectData.subject === 'HSU') {
+      return (
+        o.operator.includes('nenne') ||
+        o.operator.includes('ordne') ||
+        o.operator.includes('beschreibe') ||
+        o.operator.includes('begründe') ||
+        o.operator.includes('kreuze') ||
+        o.operator.includes('ergänze') ||
+        o.operator.includes('verbinde')
+      )
+    }
+    return (
+      o.operator.includes('nenne') ||
+      o.operator.includes('ordne') ||
+      o.operator.includes('beschreibe') ||
+      o.operator.includes('markiere') ||
+      o.operator.includes('ergänze') ||
+      o.operator.includes('schreibe') ||
+      o.operator.includes('verbinde')
+    )
+  })
+
+  const allowedOpsStr = allowedOps
     .map((o) => `"${o.operator}" (${o.beschreibung.split('.')[0]})`)
     .join(', ')
 
   const forbiddenOpsStr = AUSGESCHLOSSENE_OPERATOREN.map(
-    (o) => `"${o.operator}" (stattsessen: ${o.grundschulAlternative})`
+    (o) => `"${o.operator}" (stattdessen: ${o.grundschulAlternative})`
   ).join(', ')
 
   return `

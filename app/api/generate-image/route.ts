@@ -38,16 +38,22 @@ export async function POST(req: NextRequest) {
     const filteredThema = applyPiiFilter(rawThema).filtered
     const filteredMotiv = applyPiiFilter(rawMotiv).filtered
 
-    // 3. Prompt-Engineering nach Anforderung
-    // Prüfe, ob es sich um ein abstraktes Sprachthema handelt (Deutsch, Rechtschreibung, Satzbau etc.)
+    // Prüfe, ob es sich um ein abstraktes Sprachthema oder Mathematik handelt
     const isGrammarTopic =
       fach.includes('deutsch') ||
       /rechtschreib|satzbau|satzglieder|nomen|verben|adjektiv|wortart|grammatik|wörter ordnen|schüttelsatz/i.test(
         filteredThema
       )
+    const isMathTopic =
+      fach.includes('mathe') ||
+      /mathematik|rechnen|division|geteilt|multiplikation|malnehmen|addition|subtraktion|zahlen|geometrie/i.test(
+        filteredThema
+      )
 
     const subject = filteredMotiv
       ? filteredMotiv
+      : isMathTopic
+      ? 'children sharing apples equally or friendly calculator mascot'
       : isGrammarTopic
       ? 'cute educational character (like an owl with a notebook or a smiling pencil)'
       : filteredThema
@@ -55,6 +61,10 @@ export async function POST(req: NextRequest) {
     let promptStructure = ''
     if (stil === 'sketch') {
       promptStructure = `classic black and white line art coloring page illustration for children textbook, ${subject}, pure black ink line drawing on pure white background, isolated, minimalist contour art, no color, no grayscale shading, no 3d render, no messy details`
+    } else if (isMathTopic && !filteredMotiv) {
+      // Exakter Default-Prompt für FLUX bei Mathematik (kein Roboter / 3D-Kasten)
+      promptStructure =
+        'simple friendly minimalist textbook line illustration of children sharing apples equally or a small friendly calculator mascot, clean black outlines, transparent or pure white background, no shading, no 3d render'
     } else if (isGrammarTopic && !filteredMotiv) {
       // Exakter Default-Prompt für FLUX bei Deutsch / Rechtschreibung / Satzbau
       promptStructure =
@@ -64,7 +74,7 @@ export async function POST(req: NextRequest) {
     }
 
     const negativePrompt =
-      'computer folder, 3d folder, office folder, desktop icon, software app logo, windows icon, photorealistic, 3d render, dark, gritty, ugly, complex, noisy background, text, typography, alphabet letters, words, watermark, cropped'
+      'robot, android, mechanical machine, 3d cube, 3d block, computer folder, 3d folder, office folder, desktop icon, software app logo, windows icon, photorealistic, 3d render, dark, gritty, ugly, complex, noisy background, text, typography, alphabet letters, words, watermark, cropped'
 
     const seed = Math.floor(Math.random() * 10000000)
     const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
